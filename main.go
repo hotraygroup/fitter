@@ -2,20 +2,17 @@ package main
 
 import (
 	"github.com/chfenger/goNum"
+	"github.com/spf13/cobra"
 	"github.com/tealeg/xlsx"
 	"log"
 )
 
-func checkErr(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func excelParse(fileName string) [][]float64 {
+func excelParse(fileName string) ([][]float64, error) {
 	xlFile, err := xlsx.OpenFile(fileName)
-	checkErr(err)
 
+	if err != nil {
+		return nil, err
+	}
 	//获取行数
 	rowCount := len(xlFile.Sheets[0].Rows)
 	log.Printf("rowCount is %d", rowCount)
@@ -31,10 +28,6 @@ func excelParse(fileName string) [][]float64 {
 
 		//跳过第前行表头信息
 		if rowIndex < 2 {
-			// for _, cell := range row.Cells {
-			//  text := cell.String()
-			//  fmt.Printf("%s\n", text)
-			// }
 			continue
 		}
 		//遍历每一个单元
@@ -54,56 +47,98 @@ func excelParse(fileName string) [][]float64 {
 		}
 	}
 
-	return resourceArr
+	return resourceArr, nil
+}
+
+func reverse(arr []float64) {
+	length := len(arr)
+	for i := 0; i < length/2; i++ {
+		temp := arr[length-1-i]
+		arr[length-1-i] = arr[i]
+		arr[i] = temp
+	}
 }
 
 func main() {
 
-	log.Printf("main running")
-	arr := excelParse("YHJ-1875-VT.xlsx")
-	//log.Printf("%+v", arr)
+	file := "./YHJ-1875-VT.xlsx"
+	power := 4
 
-	var A, B, C []float64
+	root := &cobra.Command{
+		Use:   "fitter",
+		Short: "fitter",
+		Long:  "fitter ratio and power",
 
-	for i := 0; i < len(arr); i++ {
-		var params []float64
-		for j := 0; j < len(arr[i]); j++ {
-			params = append(params, float64(j))
-			params = append(params, arr[j][i])
-		}
-		xy := goNum.NewMatrix(len(params)/2, 2, params)
+		Run: func(cmd *cobra.Command, args []string) {
+			log.Printf("main running")
 
-		if out, _, _, ok := goNum.FittingPolynomial(xy, 2); ok == true {
-			//log.Printf("out: %+v", out)
-			A = append(A, out.Data[2])
-			B = append(B, out.Data[1])
-			C = append(C, out.Data[0])
-		} else {
-			log.Printf("err is %v", ok)
-		}
+			if file == "" {
+				log.Printf("no input file")
+				return
+			}
+
+			arr, err := excelParse(file)
+
+			if err != nil {
+				log.Printf("no input file")
+				return
+			}
+
+			//log.Printf("%+v", arr)
+
+			ratio := make([][]float64, power+1)
+
+			log.Printf("size arr: %d, size arr[0]: %d", len(arr), len(arr[0]))
+			//算全部系数
+			for i := 0; i < len(arr[0]); i++ {
+				var params []float64
+				for j := 0; j < len(arr); j++ {
+					params = append(params, float64(j))
+					params = append(params, arr[j][i])
+				}
+				xy := goNum.NewMatrix(len(params)/2, 2, params)
+
+				if out, _, _, ok := goNum.FittingPolynomial(xy, power); ok == true {
+					reverse(out.Data)
+					for i := 0; i <= power; i++ {
+						ratio[i] = append(ratio[i], out.Data[i])
+					}
+				} else {
+					log.Printf("err is %v", ok)
+				}
+			}
+
+			for i := 0; i <= power; i++ {
+				log.Printf("ratio[%d] is %+v", power-i, ratio[i])
+				log.Printf("------------------------------------")
+			}
+
+			for i := 0; i <= power; i++ {
+				var params []float64
+				for j := 0; j < len(ratio[i]); j++ {
+					params = append(params, float64(j))
+					params = append(params, ratio[i][j])
+				}
+
+				//log.Printf("paramsA: %+v", paramsA)
+
+				xy := goNum.NewMatrix(len(params)/2, 2, params)
+
+				if out, _, _, ok := goNum.FittingPolynomial(xy, power); ok == true {
+					reverse(out.Data)
+					log.Printf("ratio[%d]: out: %+v", power-i, out.Data)
+				} else {
+					log.Printf("err is %v", ok)
+				}
+
+			}
+
+		},
 	}
 
-	log.Printf("A: %+v", A)
-	log.Printf("-------------------")
-	log.Printf("B: %+v", B)
+	root.PersistentFlags().StringVar(&file, "file", file, "--file ./YHJ-1875-VT.xlsx")
+	root.PersistentFlags().IntVar(&power, "power", power, "--power 4")
 
-	log.Printf("-------------------")
-	log.Printf("C: %+v", C)
+	root.Execute()
 
-	log.Printf("-------------------")
-
-	var params []float64
-	for i := 0; i < len(C); i++ {
-		params = append(params, float64(i))
-		params = append(params, C[i])
-	}
-
-	xy := goNum.NewMatrix(len(params)/2, 2, params)
-
-	if out, _, _, ok := goNum.FittingPolynomial(xy, 2); ok == true {
-		//log.Printf("out: %+v", out)
-		log.Printf("C out: %f, %f, %f", out.Data[2], out.Data[1], out.Data[0])
-	} else {
-		log.Printf("err is %v", ok)
-	}
 }
