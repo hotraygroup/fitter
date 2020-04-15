@@ -7,6 +7,11 @@ import (
 	"log"
 )
 
+var (
+	xs_obj []float64
+	xs_amb []float64
+)
+
 func excelParse(fileName string) ([][]float64, error) {
 	xlFile, err := xlsx.OpenFile(fileName)
 
@@ -27,16 +32,34 @@ func excelParse(fileName string) ([][]float64, error) {
 		//log.Printf("cellCount is %d", cellCount)
 
 		//跳过第前行表头信息
-		if rowIndex < 2 {
+		if rowIndex == 0 {
 			continue
 		}
-		//遍历每一个单元
 
+		if rowIndex == 1 { //第一行 环境坐标
+			log.Printf("rowIndex is %d, count is %d", rowIndex, len(row.Cells))
+			for cellIndex, cell := range row.Cells {
+				if cellIndex < 2 {
+					continue
+				}
+				value, _ := cell.Float()
+				xs_amb = append(xs_amb, value)
+			}
+			log.Printf("xs_amb[%d] is %+v", len(xs_amb), xs_amb)
+			continue
+		}
+
+		//遍历每一个单元
 		for cellIndex, cell := range row.Cells {
-			if cellIndex < 2 {
+			if cellIndex == 0 { //跳过列头
 				continue
 			}
 			value, _ := cell.Float()
+
+			if cellIndex == 1 {
+				xs_obj = append(xs_obj, value)
+				continue
+			}
 
 			if resourceArr[rowIndex-2] == nil {
 				resourceArr[rowIndex-2] = make([]float64, cellCount-2)
@@ -46,6 +69,7 @@ func excelParse(fileName string) ([][]float64, error) {
 
 		}
 	}
+	log.Printf("xs_obj[%d]: +%v", len(xs_obj), xs_obj)
 
 	return resourceArr, nil
 }
@@ -93,7 +117,7 @@ func main() {
 			for i := 0; i < len(arr[0]); i++ {
 				var params []float64
 				for j := 0; j < len(arr); j++ {
-					params = append(params, float64(j))
+					params = append(params, xs_obj[j])
 					params = append(params, arr[j][i])
 				}
 				xy := goNum.NewMatrix(len(params)/2, 2, params)
@@ -116,7 +140,7 @@ func main() {
 			for i := 0; i <= power; i++ {
 				var params []float64
 				for j := 0; j < len(ratio[i]); j++ {
-					params = append(params, float64(j))
+					params = append(params, xs_amb[j])
 					params = append(params, ratio[i][j])
 				}
 
